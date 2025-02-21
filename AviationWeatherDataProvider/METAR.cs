@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Serialization;
 using Microsoft.Xrm.Sdk;
@@ -165,19 +164,6 @@ namespace AviationWeatherDataProvider
 
         [XmlText]
         public string Text { get; set; }
-
-        //public Entity GetResponseAsEntity(ITracingService tracer)
-        //{
-        //    Entity entity = new Entity("awx_metar");
-        //    var id = RequestIndex;
-        //    var uniqueIdentifier = Helpers.IntToGuid(id);
-        //    tracer.Trace("METAR Id: {0} transformed into {1}", id, uniqueIdentifier);
-
-        //    entity["awx_metarid"] = uniqueIdentifier;
-        //    entity["awx_metartext"] = Data.METAR.RawText;
-
-        //    return entity;
-        //}
 
         public EntityCollection GetResponseMetars(ITracingService tracer, Response response)
         {
