@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Xml.Serialization;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Query;
 
 namespace AviationWeatherDataProvider
 {
@@ -19,8 +20,41 @@ namespace AviationWeatherDataProvider
             var tracer = localPluginContext.TracingService;
 
             EntityCollection entityCollection = new EntityCollection();
-
             tracer.Trace("Retrieving METARs...");
+
+            QueryExpression query = (QueryExpression)context.InputParameters["Query"];
+            tracer.Trace("Query: {0}", query.EntityName);
+            tracer.Trace("ColumnSet Columns: {0}", string.Join(",", query.ColumnSet.Columns));
+            tracer.Trace("Criteria FilterOperator: {0}", query.Criteria.FilterOperator);
+            tracer.Trace("Criteria Conditions: {0}", query.Criteria.Conditions.Count);
+            string stationIdToFilterFor = null;
+            string stationIdToNotReturn = null;
+            if (query.Criteria != null && query.Criteria.Conditions.Count != 0)
+            {
+                foreach (var condition in query.Criteria.Conditions)
+                {
+                    tracer.Trace("Condition: {0}", condition.AttributeName);
+                    tracer.Trace("Operator: {0}", condition.Operator);
+                    tracer.Trace("Values: {0}", string.Join(",", condition.Values));
+                    if (condition.AttributeName == "awx_name")
+                    {
+                        if (condition.Operator == ConditionOperator.Equal)
+                        {
+                            stationIdToFilterFor = condition.Values[0] as string;
+                        }
+                        else if (condition.Operator == ConditionOperator.NotEqual)
+                        {
+                            stationIdToNotReturn = condition.Values[0] as string;
+                        }
+                    }
+                }
+            }
+            if (context.InputParameters.Contains("QueryText"))
+            {
+                string queryText = context.InputParameters["QueryText"] as string;
+                tracer.Trace("QueryText: {0}", queryText);
+            }
+
             using (HttpClient client = new HttpClient())
             {
                 var stateBatches = States
@@ -46,14 +80,28 @@ namespace AviationWeatherDataProvider
                         response.EnsureSuccessStatusCode();
 
                         var metarAsXml = response.Content.ReadAsStringAsync().Result;
-                        tracer.Trace("metarXml: {0}", metarAsXml);
                         XmlSerializer serializer = new XmlSerializer(typeof(Response));
                         using (StringReader reader = new StringReader(metarAsXml))
                         {
                             var responseObj = (Response)serializer.Deserialize(reader);
-                            entityCollection.Entities.AddRange(
-                                responseObj.GetResponseMetars(null, responseObj).Entities
+                            EntityCollection metars = responseObj.GetResponseMetars(
+                                null,
+                                responseObj
                             );
+                            if (stationIdToFilterFor != null)
+                            {
+                                if (metars.Entities.Count > 0)
+                                {
+                                    var foundEntity = metars.Entities.First(entity =>
+                                        entity.GetAttributeValue<string>("awx_name")
+                                        == stationIdToFilterFor
+                                    );
+                                    entityCollection.Entities.Clear();
+                                    entityCollection.Entities.Add(foundEntity);
+                                    break;
+                                }
+                            }
+                            entityCollection.Entities.AddRange(metars.Entities);
                         }
                     }
                     catch (Exception ex)
@@ -61,6 +109,12 @@ namespace AviationWeatherDataProvider
                         tracer.Trace(ex.ToString());
                     }
                 }
+            }
+            if (stationIdToNotReturn != null)
+            {
+                entityCollection.Entities.Where(entity =>
+                    entity.GetAttributeValue<string>("awx_name") != stationIdToNotReturn
+                );
             }
             context.OutputParameters["BusinessEntityCollection"] = entityCollection;
         }
