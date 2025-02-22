@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
-using System.Net;
+using System.Linq;
+using System.Net.Http;
 using System.Xml.Serialization;
 using Microsoft.Xrm.Sdk;
 
@@ -9,10 +10,7 @@ namespace AviationWeatherDataProvider
     public class RetrieveMultiplePlugin : PluginBase
     {
         public RetrieveMultiplePlugin()
-            : base(typeof(RetrieveMultiplePlugin))
-        {
-            // Not implemented
-        }
+            : base(typeof(RetrieveMultiplePlugin)) { }
 
         protected override void ExecuteCdsPlugin(ILocalPluginContext localPluginContext)
         {
@@ -23,43 +21,47 @@ namespace AviationWeatherDataProvider
             EntityCollection entityCollection = new EntityCollection();
 
             tracer.Trace("Retrieving METARs...");
-
-            try
+            using (HttpClient client = new HttpClient())
             {
-                var webRequest =
-                    WebRequest.Create(
-                        "https://aviationweather.gov/api/data/dataserver?requestType=retrieve&dataSource=metars&stationString=%40ga&hoursBeforeNow=1&format=xml&mostRecentForEachStation=constraint"
-                    ) as HttpWebRequest;
+                var stateBatches = States
+                    .Initials.Select((state, index) => new { state, index })
+                    .GroupBy(x => x.index / 10)
+                    .Select(g => g.Select(x => x.state).ToArray())
+                    .ToArray();
 
-                if (webRequest == null)
+                foreach (var batch in stateBatches)
                 {
-                    return;
-                }
-
-                webRequest.ContentType = "xml";
-
-                using (var stream = webRequest.GetResponse().GetResponseStream())
-                {
-                    using (var streamReader = new StreamReader(stream))
+                    var stationString = string.Join(
+                        ",",
+                        batch.Select(state => $"%40{state.ToLower()}")
+                    );
+                    try
                     {
-                        var metarAsXml = streamReader.ReadToEnd();
-                        Console.WriteLine(metarAsXml);
+                        var response = client
+                            .GetAsync(
+                                $"https://aviationweather.gov/api/data/dataserver?requestType=retrieve&dataSource=metars&stationString={stationString}&hoursBeforeNow=1&format=xml&mostRecentForEachStation=constraint"
+                            )
+                            .Result;
+
+                        response.EnsureSuccessStatusCode();
+
+                        var metarAsXml = response.Content.ReadAsStringAsync().Result;
+                        tracer.Trace("metarXml: {0}", metarAsXml);
                         XmlSerializer serializer = new XmlSerializer(typeof(Response));
                         using (StringReader reader = new StringReader(metarAsXml))
                         {
-                            var response = (Response)serializer.Deserialize(reader);
+                            var responseObj = (Response)serializer.Deserialize(reader);
                             entityCollection.Entities.AddRange(
-                                response.GetResponseMetars(null, response).Entities
+                                responseObj.GetResponseMetars(null, responseObj).Entities
                             );
                         }
                     }
+                    catch (Exception ex)
+                    {
+                        tracer.Trace(ex.ToString());
+                    }
                 }
             }
-            catch (Exception ex)
-            {
-                tracer.Trace(ex.ToString());
-            }
-
             context.OutputParameters["BusinessEntityCollection"] = entityCollection;
         }
     }
