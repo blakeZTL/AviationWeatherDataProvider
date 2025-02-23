@@ -76,6 +76,7 @@
     <Compile Include="METAR.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="PluginBase.cs" />
+    <Compile Include="QueryConversion\NameConversion.cs" />
     <Compile Include="RetrieveMultiplePlugin.cs" />
     <Compile Include="RetrievePlugin.cs" />
     <Compile Include="States.cs" />
