@@ -96,6 +96,7 @@
     <Compile Include="RetrieveMultiplePlugin.cs" />
     <Compile Include="RetrievePlugin.cs" />
     <Compile Include="States.cs" />
+    <Compile Include="Utils.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="BlakeBradford.snk" />
