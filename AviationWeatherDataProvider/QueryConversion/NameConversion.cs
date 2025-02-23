@@ -29,8 +29,15 @@ namespace AviationWeatherDataProvider.QueryConversion
                 return queryParameter;
             }
 
-            ProcessConditions(query.Criteria.Conditions.ToList(), unhandeledExpressions);
-            var filterConditions = query.Criteria.Filters.SelectMany(f => f.Conditions).ToList();
+            ProcessConditions(
+                query.Criteria.Conditions.Where(c => c.AttributeName == "awx_name").ToList(),
+                unhandeledExpressions
+            );
+            var filterConditions = query
+                .Criteria.Filters.SelectMany(f =>
+                    f.Conditions.Where(c => c.AttributeName == "awx_name")
+                )
+                .ToList();
             ProcessConditions(filterConditions, unhandeledExpressions);
 
             void ProcessConditions(
@@ -42,7 +49,6 @@ namespace AviationWeatherDataProvider.QueryConversion
                 {
                     if (condition.AttributeName != "awx_name")
                     {
-                        tracer.Trace($"Attribute {condition.AttributeName} is not supported.");
                         continue;
                     }
 
