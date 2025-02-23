@@ -22,12 +22,9 @@ namespace AviationWeatherDataProvider
 
             Entity entity = null;
 
-            tracer.Trace("Retrieving METAR...");
-
             try
             {
                 var guid = context.PrimaryEntityId;
-                tracer.Trace($"Primary Entity ID: {guid}");
 
                 var stationTime = Helpers.ParseGuidToText(guid, tracer);
                 tracer.Trace($"Station Id: {stationTime.StationId}");
@@ -36,26 +33,32 @@ namespace AviationWeatherDataProvider
                 var dateString = ConvertDateTimeToString(stationTime.ObservationTime);
                 var stationId = stationTime.StationId;
 
-                var webRequest =
-                    WebRequest.Create(
-                        $"https://aviationweather.gov/api/data/metar?ids={stationId}&format=json&taf=true&date={dateString}"
-                    ) as HttpWebRequest;
-
-                if (webRequest == null)
+                if (
+                    !(
+                        WebRequest.Create(
+                            $"https://aviationweather.gov/api/data/metar?ids={stationId}&format=json&taf=true&date={dateString}"
+                        )
+                        is HttpWebRequest webRequest
+                    )
+                )
                 {
                     return;
                 }
                 webRequest.ContentType = "application/json";
+                tracer.Trace(webRequest.GetResponse().ToString());
                 using (var stream = webRequest.GetResponse().GetResponseStream())
                 {
                     using (var streamReader = new StreamReader(stream))
                     {
                         var metarAsJson = streamReader.ReadToEnd();
-                        tracer.Trace(metarAsJson);
                         var metarModels = JsonSerializer.Deserialize<List<MetarModel.Metar>>(
                             metarAsJson
                         );
-                        entity = metarModels.FirstOrDefault().ToEntity(tracer);
+                        var metar = metarModels.FirstOrDefault();
+                        if (metar != null)
+                        {
+                            entity = metar.ToEntity(tracer);
+                        }
                     }
                 }
             }
