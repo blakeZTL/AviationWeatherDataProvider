@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Xml.Serialization;
+using System.Text.Json;
+using AviationWeatherDataProvider.Models;
 using Microsoft.Xrm.Sdk;
 
 namespace AviationWeatherDataProvider
@@ -36,27 +38,24 @@ namespace AviationWeatherDataProvider
 
                 var webRequest =
                     WebRequest.Create(
-                        $"https://aviationweather.gov/api/data/metar?ids={stationId}&format=xml&date={dateString}"
+                        $"https://aviationweather.gov/api/data/metar?ids={stationId}&format=json&taf=true&date={dateString}"
                     ) as HttpWebRequest;
 
                 if (webRequest == null)
                 {
                     return;
                 }
-                webRequest.ContentType = "xml";
+                webRequest.ContentType = "application/json";
                 using (var stream = webRequest.GetResponse().GetResponseStream())
                 {
                     using (var streamReader = new StreamReader(stream))
                     {
-                        var metarAsXml = streamReader.ReadToEnd();
-                        tracer.Trace(metarAsXml);
-                        XmlSerializer serializer = new XmlSerializer(typeof(Response));
-                        using (StringReader reader = new StringReader(metarAsXml))
-                        {
-                            var response = (Response)serializer.Deserialize(reader);
-                            var metars = response.GetResponseMetars(tracer, response);
-                            entity = metars.Entities.FirstOrDefault();
-                        }
+                        var metarAsJson = streamReader.ReadToEnd();
+                        tracer.Trace(metarAsJson);
+                        var metarModels = JsonSerializer.Deserialize<List<MetarModel.Metar>>(
+                            metarAsJson
+                        );
+                        entity = metarModels.FirstOrDefault().ToEntity(tracer);
                     }
                 }
             }
