@@ -72,7 +72,7 @@ namespace AviationWeatherDataProvider.QueryConversion
                     }
                 }
             }
-
+            tracer.Trace($"Unhandeled Expressions: {unhandeledExpressions.Count}");
             tracer.Trace(nameof(TransformQueryExpression) + $" End: {DateTime.Now}");
             return queryParameter;
         }
@@ -84,8 +84,6 @@ namespace AviationWeatherDataProvider.QueryConversion
         )
         {
             tracer.Trace(nameof(ProcessUnhandeledExpressions) + $" Start: {DateTime.Now}");
-            tracer.Trace($"Unhandeled expressions count: {unhandeledExpressions.Count}");
-            tracer.Trace($"Metars count: {metars.Entities.Count}");
 
             if (unhandeledExpressions == null || !unhandeledExpressions.Any())
             {
@@ -110,12 +108,10 @@ namespace AviationWeatherDataProvider.QueryConversion
                         break;
                     case ConditionOperator.Like:
                         var likeValue = exp.Values[0] as string;
-                        tracer.Trace($"Like value: {likeValue}");
                         var regexPattern = "^" + Regex.Escape(likeValue).Replace("%", ".*") + "$";
                         var likeEntities = metars
                             .Entities.Where(m => Regex.IsMatch((string)m["awx_name"], regexPattern))
                             .ToList();
-                        tracer.Trace("Entities after Like filter:");
                         foreach (var entity in likeEntities)
                         {
                             tracer.Trace($"awx_name: {(string)entity["awx_name"]}");
