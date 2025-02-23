@@ -1,8 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
-using System.Xml.Serialization;
+using System.Text.Json;
+using AviationWeatherDataProvider.Models;
 using AviationWeatherDataProvider.QueryConversion;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
@@ -21,13 +24,6 @@ namespace AviationWeatherDataProvider
             var tracer = localPluginContext.TracingService;
 
             QueryExpression query = (QueryExpression)context.InputParameters["Query"];
-            foreach (var filter in query.Criteria.Filters)
-            {
-                foreach (var condition in filter.Conditions)
-                {
-                    tracer.Trace(condition.AttributeName);
-                }
-            }
 
             string stationString = NameConversion.TransformQueryExpression(
                 query,
@@ -38,33 +34,39 @@ namespace AviationWeatherDataProvider
             string observationTimeQuery = ObservationTimeQueryConversion.TransformQueryExpression(
                 query,
                 tracer,
-                out var unhandeledObservationTimeExpressions
+                out var _
             );
-            tracer.Trace($"Observation Time Query: {observationTimeQuery}");
 
             EntityCollection entityCollection;
 
-            if (stationString != null)
+            try
             {
-                tracer.Trace("Retrieving METARs by station string ({0})...", stationString);
-                entityCollection = GetMetarsByStationString(
-                    stationString,
-                    tracer,
-                    observationTimeQuery
-                );
-            }
-            else
-            {
-                entityCollection = GetMetarsByStates(tracer);
-            }
+                if (stationString != null)
+                {
+                    entityCollection = GetMetarsByStationString(
+                        stationString,
+                        tracer,
+                        observationTimeQuery
+                    );
+                }
+                else
+                {
+                    entityCollection = GetMetarsByStates(tracer);
+                }
 
-            if (unhandeledNameExpressions.Any())
+                if (unhandeledNameExpressions.Any())
+                {
+                    entityCollection = NameConversion.ProcessUnhandeledExpressions(
+                        entityCollection,
+                        unhandeledNameExpressions,
+                        tracer
+                    );
+                }
+            }
+            catch (Exception ex)
             {
-                entityCollection = NameConversion.ProcessUnhandeledExpressions(
-                    entityCollection,
-                    unhandeledNameExpressions,
-                    tracer
-                );
+                tracer.Trace(ex.ToString());
+                throw new InvalidPluginExecutionException(ex.Message);
             }
 
             context.OutputParameters["BusinessEntityCollection"] = entityCollection;
@@ -77,31 +79,42 @@ namespace AviationWeatherDataProvider
         )
         {
             EntityCollection entities = new EntityCollection() { EntityName = "awx_metar" };
+            var uri =
+                $"https://aviationweather.gov/api/data/metar?ids={stationString}&format=json&taf=true";
+            if (observationTimeQuery != null)
+            {
+                uri += observationTimeQuery;
+            }
+            tracer.Trace(nameof(GetMetarsByStationString) + " " + uri);
             using (HttpClient client = new HttpClient())
             {
                 try
                 {
-                    var response = client
-                        .GetAsync(
-                            $"https://aviationweather.gov/api/data/dataserver?requestType=retrieve&dataSource=metars&format=xml&stationString={stationString}{(string.IsNullOrEmpty(observationTimeQuery) ? "&hoursBeforeNow=1&mostRecentForEachStation=constraint" : observationTimeQuery)}"
-                        )
-                        .Result;
-
-                    response.EnsureSuccessStatusCode();
-
-                    var metarAsXml = response.Content.ReadAsStringAsync().Result;
-                    XmlSerializer serializer = new XmlSerializer(typeof(Response));
-                    using (StringReader reader = new StringReader(metarAsXml))
+                    if (!(WebRequest.Create(uri) is HttpWebRequest webRequest))
                     {
-                        var responseObj = (Response)serializer.Deserialize(reader);
-                        EntityCollection metars = responseObj.GetResponseMetars(null, responseObj);
-
-                        entities.Entities.AddRange(metars.Entities);
+                        return entities;
+                    }
+                    webRequest.ContentType = "application/json";
+                    using (var stream = webRequest.GetResponse().GetResponseStream())
+                    {
+                        using (var streamReader = new StreamReader(stream))
+                        {
+                            var metarAsJson = streamReader.ReadToEnd();
+                            var metarModels = JsonSerializer.Deserialize<List<MetarModel.Metar>>(
+                                metarAsJson
+                            );
+                            foreach (var metar in metarModels)
+                            {
+                                var entity = metar.ToEntity(tracer);
+                                entities.Entities.Add(entity);
+                            }
+                        }
                     }
                 }
                 catch (Exception ex)
                 {
                     tracer.Trace(ex.ToString());
+                    throw new InvalidPluginExecutionException("Error retrieving METARs.");
                 }
             }
 
@@ -128,37 +141,38 @@ namespace AviationWeatherDataProvider
 
                     try
                     {
-                        var response = client
-                            .GetAsync(
-                                $"https://aviationweather.gov/api/data/dataserver?requestType=retrieve&dataSource=metars&stationString={stationString}&hoursBeforeNow=1&format=xml&mostRecentForEachStation=constraint"
+                        if (
+                            !(
+                                WebRequest.Create(
+                                    $"https://aviationweather.gov/api/data/metar?ids={stationString}&format=json&taf=true"
+                                )
+                                is HttpWebRequest webRequest
                             )
-                            .Result;
-
-                        response.EnsureSuccessStatusCode();
-
-                        var metarAsXml = response.Content.ReadAsStringAsync().Result;
-                        XmlSerializer serializer = new XmlSerializer(typeof(Response));
-                        using (StringReader reader = new StringReader(metarAsXml))
+                        )
                         {
-                            var responseObj = (Response)serializer.Deserialize(reader);
-                            if (responseObj.Data.NumResults == 1000)
+                            return entities;
+                        }
+                        webRequest.ContentType = "application/json";
+                        using (var stream = webRequest.GetResponse().GetResponseStream())
+                        {
+                            using (var streamReader = new StreamReader(stream))
                             {
-                                tracer.Trace("Too many results returned. Skipping batch.");
-                                throw new InvalidPluginExecutionException(
-                                    $"Too many results returned for {stationString}"
-                                );
+                                var metarAsJson = streamReader.ReadToEnd();
+                                var metarModels = JsonSerializer.Deserialize<
+                                    List<MetarModel.Metar>
+                                >(metarAsJson);
+                                foreach (var metar in metarModels)
+                                {
+                                    var entity = metar.ToEntity(tracer);
+                                    entities.Entities.Add(entity);
+                                }
                             }
-                            EntityCollection metars = responseObj.GetResponseMetars(
-                                null,
-                                responseObj
-                            );
-
-                            entities.Entities.AddRange(metars.Entities);
                         }
                     }
                     catch (Exception ex)
                     {
                         tracer.Trace(ex.ToString());
+                        throw new InvalidPluginExecutionException("Error retrieving METARs.");
                     }
                 }
             }
