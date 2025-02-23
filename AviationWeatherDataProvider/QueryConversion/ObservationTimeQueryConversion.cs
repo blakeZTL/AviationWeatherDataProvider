@@ -47,15 +47,21 @@ namespace AviationWeatherDataProvider.QueryConversion
                 .ToList();
             ProcessConditions(filterConditions, unhandeledExpressions);
 
-            queryParameter =
-                startTime == default
-                    ? string.Empty
-                    : $"&startTime={startTime:yyyy-MM-ddTHH:mm:ssZ}";
+            if (endTime != default && (DateTime.UtcNow - endTime).TotalSeconds > 15 * 24 * 60 * 60)
+            {
+                queryParameter = "&date=" + endTime.ToString("yyyy-MM-ddTHH:mm:ssZ");
+            }
 
-            queryParameter +=
-                endTime == default ? string.Empty : $"&endTime={endTime:yyyy-MM-ddTHH:mm:ssZ}";
-
-            tracer.Trace($"Query Parameter: {queryParameter}");
+            var hoursBetween = (endTime - startTime).TotalHours;
+            if (hoursBetween > 24 * 15)
+            {
+                tracer.Trace("Data only available for 15 days");
+                hoursBetween = 24 * 15;
+            }
+            if (hoursBetween > 0)
+            {
+                queryParameter = $"&hours={Math.Round(hoursBetween)}";
+            }
             tracer.Trace($"Unhandeled Expressions: {unhandeledExpressions.Count}");
             tracer.Trace(
                 $"{nameof(ObservationTimeQueryConversion)}.{nameof(TransformQueryExpression)} End: {DateTime.Now}"
