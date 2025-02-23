@@ -21,6 +21,13 @@ namespace AviationWeatherDataProvider
             var tracer = localPluginContext.TracingService;
 
             QueryExpression query = (QueryExpression)context.InputParameters["Query"];
+            foreach (var filter in query.Criteria.Filters)
+            {
+                foreach (var condition in filter.Conditions)
+                {
+                    tracer.Trace(condition.AttributeName);
+                }
+            }
 
             string stationString = NameConversion.TransformQueryExpression(
                 query,
@@ -28,12 +35,23 @@ namespace AviationWeatherDataProvider
                 out var unhandeledNameExpressions
             );
 
+            string observationTimeQuery = ObservationTimeQueryConversion.TransformQueryExpression(
+                query,
+                tracer,
+                out var unhandeledObservationTimeExpressions
+            );
+            tracer.Trace($"Observation Time Query: {observationTimeQuery}");
+
             EntityCollection entityCollection;
 
             if (stationString != null)
             {
                 tracer.Trace("Retrieving METARs by station string ({0})...", stationString);
-                entityCollection = GetMetarsByStationString(stationString, tracer);
+                entityCollection = GetMetarsByStationString(
+                    stationString,
+                    tracer,
+                    observationTimeQuery
+                );
             }
             else
             {
@@ -54,7 +72,8 @@ namespace AviationWeatherDataProvider
 
         static EntityCollection GetMetarsByStationString(
             string stationString,
-            ITracingService tracer
+            ITracingService tracer,
+            string observationTimeQuery = null
         )
         {
             EntityCollection entities = new EntityCollection() { EntityName = "awx_metar" };
@@ -64,7 +83,7 @@ namespace AviationWeatherDataProvider
                 {
                     var response = client
                         .GetAsync(
-                            $"https://aviationweather.gov/api/data/dataserver?requestType=retrieve&dataSource=metars&stationString={stationString}&hoursBeforeNow=1&format=xml&mostRecentForEachStation=constraint"
+                            $"https://aviationweather.gov/api/data/dataserver?requestType=retrieve&dataSource=metars&format=xml&stationString={stationString}{(string.IsNullOrEmpty(observationTimeQuery) ? "&hoursBeforeNow=1&mostRecentForEachStation=constraint" : observationTimeQuery)}"
                         )
                         .Result;
 
