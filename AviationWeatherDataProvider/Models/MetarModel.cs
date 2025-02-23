@@ -12,7 +12,7 @@ namespace AviationWeatherDataProvider.Models
         public class Metar
         {
             [JsonPropertyName("metar_id")]
-            public long MetarId { get; set; }
+            public long? MetarId { get; set; }
 
             [JsonPropertyName("icaoId")]
             public string IcaoId { get; set; }
@@ -21,38 +21,39 @@ namespace AviationWeatherDataProvider.Models
             public string ReceiptTime { get; set; }
 
             [JsonPropertyName("obsTime")]
-            public long ObsTime { get; set; }
+            public long? ObsTime { get; set; }
 
             [JsonPropertyName("reportTime")]
             public string ReportTime { get; set; }
 
             [JsonPropertyName("temp")]
-            public float Temp { get; set; }
+            public float? Temp { get; set; }
 
             [JsonPropertyName("dewp")]
-            public float Dewp { get; set; }
+            public float? Dewp { get; set; }
 
             [JsonPropertyName("wdir")]
-            [JsonConverter(typeof(WindDirectionConverter))]
+            [JsonConverter(typeof(NumberStringConverter))]
             public string Wdir { get; set; }
 
             [JsonPropertyName("wspd")]
-            public int Wspd { get; set; }
+            public int? Wspd { get; set; }
 
             [JsonPropertyName("wgst")]
             public double? Wgst { get; set; }
 
             [JsonPropertyName("visib")]
+            [JsonConverter(typeof(NumberStringConverter))]
             public string Visib { get; set; }
 
             [JsonPropertyName("altim")]
-            public float Altim { get; set; }
+            public float? Altim { get; set; }
 
             [JsonPropertyName("slp")]
             public double? Slp { get; set; }
 
             [JsonPropertyName("qcField")]
-            public int QcField { get; set; }
+            public int? QcField { get; set; }
 
             [JsonPropertyName("wxString")]
             public string WxString { get; set; }
@@ -100,16 +101,16 @@ namespace AviationWeatherDataProvider.Models
             public int MostRecent { get; set; }
 
             [JsonPropertyName("lat")]
-            public float Lat { get; set; }
+            public float? Lat { get; set; }
 
             [JsonPropertyName("lon")]
-            public float Lon { get; set; }
+            public float? Lon { get; set; }
 
             [JsonPropertyName("elev")]
-            public int Elev { get; set; }
+            public int? Elev { get; set; }
 
             [JsonPropertyName("prior")]
-            public int Prior { get; set; }
+            public int? Prior { get; set; }
 
             [JsonPropertyName("name")]
             public string Name { get; set; }
@@ -144,6 +145,21 @@ namespace AviationWeatherDataProvider.Models
                 entity["awx_altim_in_hg"] = Altim;
                 entity["awx_taf"] = RawTaf;
                 entity["awx_elevation_m"] = Elev;
+                if (Clouds != null && Clouds.Count > 0)
+                {
+                    var cloudDescriptions = new StringBuilder();
+                    foreach (var cloud in Clouds)
+                    {
+                        cloudDescriptions.AppendLine(
+                            $"{cloud.Cover}{(cloud.Base == null ? string.Empty : $" at {cloud.Base}")}"
+                        );
+                    }
+                    entity["awx_clouds"] = cloudDescriptions.ToString().TrimEnd();
+                }
+                else
+                {
+                    entity["awx_clouds"] = string.Empty;
+                }
 
                 return entity;
             }
@@ -216,7 +232,7 @@ namespace AviationWeatherDataProvider.Models
         }
     }
 
-    internal class WindDirectionConverter : JsonConverter<string>
+    internal class NumberStringConverter : JsonConverter<string>
     {
         public override string Read(
             ref Utf8JsonReader reader,
@@ -226,7 +242,14 @@ namespace AviationWeatherDataProvider.Models
         {
             if (reader.TokenType == JsonTokenType.Number)
             {
-                return reader.GetInt32().ToString();
+                try
+                {
+                    return reader.GetInt32().ToString();
+                }
+                catch (FormatException)
+                {
+                    return reader.GetDouble().ToString();
+                }
             }
             else if (reader.TokenType == JsonTokenType.String)
             {
@@ -242,6 +265,66 @@ namespace AviationWeatherDataProvider.Models
         )
         {
             writer.WriteStringValue(value);
+        }
+    }
+
+    public static class Helpers
+    {
+        public static Guid GenerateGuidFromText(string stationId, DateTime observationTime)
+        {
+            // Ensure the stationId is 4-5 characters
+            if (stationId.Length < 4 || stationId.Length > 5)
+            {
+                throw new ArgumentException("StationId must be 4 or 5 characters long.");
+            }
+
+            // Format the DateTime to a fixed-length string
+            string formattedTime = observationTime.ToString("yyyyMMddHHmm");
+
+            // Combine the StationId and formatted DateTime
+            string combinedText = stationId + formattedTime;
+
+            // Ensure the combined length is 16 characters or less
+            if (combinedText.Length > 16)
+            {
+                throw new ArgumentException(
+                    $"Combined text {combinedText} is too long to convert to a GUID."
+                );
+            }
+
+            byte[] textBytes = Encoding.UTF8.GetBytes(combinedText);
+            byte[] guidBytes = new byte[16];
+            Array.Copy(textBytes, guidBytes, textBytes.Length);
+            return new Guid(guidBytes);
+        }
+
+        public static (string StationId, DateTime ObservationTime) ParseGuidToText(
+            Guid guid,
+            ITracingService tracer = null
+        )
+        {
+            byte[] guidBytes = guid.ToByteArray();
+            string combinedText = Encoding.UTF8.GetString(guidBytes).TrimEnd('\0');
+
+            // Extract the StationId and DateTime parts
+            string stationId = combinedText.Substring(0, 4); // Assuming StationId is always 4 characters
+            string dateTimePart = combinedText.Substring(4);
+
+            if (tracer != null)
+            {
+                tracer.Trace("Parsing GUID to text...");
+                tracer.Trace(guid.ToString());
+                tracer.Trace(combinedText);
+                tracer.Trace(stationId);
+                tracer.Trace(dateTimePart);
+            }
+
+            DateTime observationTime = DateTime.ParseExact(
+                dateTimePart + "00",
+                "yyyyMMddHHmmss",
+                null
+            );
+            return (stationId, observationTime);
         }
     }
 }
