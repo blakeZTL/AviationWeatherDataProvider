@@ -137,14 +137,14 @@ namespace AviationWeatherDataProvider.Models
                 entity["awx_observationtime"] = reportDateTime;
                 entity["awx_latitude"] = Lat;
                 entity["awx_longitude"] = Lon;
-                entity["awx_temp_c"] = Temp;
-                entity["awx_dewpoint_c"] = Dewp;
+                entity["awx_temp_c"] = Utils.ConvertToFahrenheit(Temp);
+                entity["awx_dewpoint_c"] = Utils.ConvertToFahrenheit(Dewp);
                 entity["awx_wind_dir_degrees"] = Wdir;
                 entity["awx_wind_speed_kt"] = Wspd;
                 entity["awx_visibility_statute_mi"] = Visib;
-                entity["awx_altim_in_hg"] = Altim;
+                entity["awx_altim_in_hg"] = Utils.MillibarsToInOfMercury(Altim);
                 entity["awx_taf"] = RawTaf;
-                entity["awx_elevation_m"] = Elev;
+                entity["awx_elevation_m"] = Utils.MetersToFeet(Elev);
                 if (Clouds != null && Clouds.Count > 0)
                 {
                     var cloudDescriptions = new StringBuilder();
