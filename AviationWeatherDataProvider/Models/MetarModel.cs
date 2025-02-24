@@ -141,10 +141,13 @@ namespace AviationWeatherDataProvider.Models
                 entity["awx_dewpoint_c"] = Utils.ConvertToFahrenheit(Dewp);
                 entity["awx_wind_dir_degrees"] = Wdir;
                 entity["awx_wind_speed_kt"] = Wspd;
+                // TODO: Need to refactor Visib to be a decimal
                 entity["awx_visibility_statute_mi"] = Visib;
                 entity["awx_altim_in_hg"] = Utils.MillibarsToInOfMercury(Altim);
                 entity["awx_taf"] = RawTaf;
                 entity["awx_elevation_m"] = Utils.MetersToFeet(Elev);
+                entity["awx_weatherstring"] = WxString;
+                // TODO: Refactor clouds to be viable for filtering
                 if (Clouds != null && Clouds.Count > 0)
                 {
                     var cloudDescriptions = new StringBuilder();
