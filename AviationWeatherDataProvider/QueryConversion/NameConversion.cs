@@ -95,8 +95,7 @@ namespace AviationWeatherDataProvider.QueryConversion
                 tracer.Trace(
                     $"Processing unhandeled expression: {exp.AttributeName} {exp.Operator} {string.Join(",", exp.Values.Select(v => v as string))}"
                 );
-                var debugMetars = metars.Entities.Where(m => (string)m["awx_name"] == "KATL");
-                tracer.Trace($"debugMetars: {debugMetars.Count()}");
+
                 switch (exp.Operator)
                 {
                     case ConditionOperator.NotEqual:
@@ -112,10 +111,6 @@ namespace AviationWeatherDataProvider.QueryConversion
                         var likeEntities = metars
                             .Entities.Where(m => Regex.IsMatch((string)m["awx_name"], regexPattern))
                             .ToList();
-                        foreach (var entity in likeEntities)
-                        {
-                            tracer.Trace($"awx_name: {(string)entity["awx_name"]}");
-                        }
                         metars.Entities.Clear();
                         metars.Entities.AddRange(likeEntities);
                         break;
