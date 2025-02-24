@@ -45,7 +45,6 @@ namespace AviationWeatherDataProvider
                     return;
                 }
                 webRequest.ContentType = "application/json";
-                tracer.Trace(webRequest.GetResponse().ToString());
                 using (var stream = webRequest.GetResponse().GetResponseStream())
                 {
                     using (var streamReader = new StreamReader(stream))
@@ -58,6 +57,33 @@ namespace AviationWeatherDataProvider
                         if (metar != null)
                         {
                             entity = metar.ToEntity(tracer);
+                        }
+                    }
+                }
+
+                var oneHourFuture = stationTime.ObservationTime.AddHours(1);
+                dateString = ConvertDateTimeToString(oneHourFuture);
+
+                if (
+                    !(
+                        WebRequest.Create(
+                            $"https://aviationweather.gov/api/data/pirep?id={stationId}&date={dateString}&age=2&distance=50"
+                        )
+                        is HttpWebRequest pirepWebRequest
+                    )
+                )
+                {
+                    return;
+                }
+                pirepWebRequest.ContentType = "application/json";
+                using (var stream = pirepWebRequest.GetResponse().GetResponseStream())
+                {
+                    using (var streamReader = new StreamReader(stream))
+                    {
+                        var pireps = streamReader.ReadToEnd();
+                        if (!string.IsNullOrEmpty(pireps))
+                        {
+                            entity["awx_pireps"] = pireps;
                         }
                     }
                 }

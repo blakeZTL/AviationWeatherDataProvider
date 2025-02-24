@@ -62,6 +62,22 @@ namespace AviationWeatherDataProvider
                         tracer
                     );
                 }
+                // TODO: Handle filter logical operators for groupings of conditions with different logical operators
+                entityCollection = VisibilityQueryConversion.ProcessUnhandeledExpressions(
+                    entityCollection,
+                    query,
+                    tracer
+                );
+                entityCollection = WeatherStringQueryConversion.ProcessUnhandeledExpressions(
+                    entityCollection,
+                    query,
+                    tracer
+                );
+                entityCollection = CloudsQueryConversion.ProcessUnhandeledExpressions(
+                    entityCollection,
+                    query,
+                    tracer
+                );
             }
             catch (Exception ex)
             {
