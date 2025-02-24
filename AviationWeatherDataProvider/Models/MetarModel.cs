@@ -137,15 +137,15 @@ namespace AviationWeatherDataProvider.Models
                 entity["awx_observationtime"] = reportDateTime;
                 entity["awx_latitude"] = Lat;
                 entity["awx_longitude"] = Lon;
-                entity["awx_temp_c"] = Utils.ConvertToFahrenheit(Temp);
-                entity["awx_dewpoint_c"] = Utils.ConvertToFahrenheit(Dewp);
-                entity["awx_wind_dir_degrees"] = Wdir;
-                entity["awx_wind_speed_kt"] = Wspd;
+                entity["awx_temperature"] = Utils.ConvertToFahrenheit(Temp);
+                entity["awx_dewpoint"] = Utils.ConvertToFahrenheit(Dewp);
+                entity["awx_winddirection"] = Wdir;
+                entity["awx_windspeed"] = Wspd;
                 // TODO: Need to refactor Visib to be a decimal
-                entity["awx_visibility_statute_mi"] = Visib;
-                entity["awx_altim_in_hg"] = Utils.MillibarsToInOfMercury(Altim);
+                entity["awx_visibility"] = ConvertVisibility(Visib);
+                entity["awx_altimeter"] = Utils.MillibarsToInOfMercury(Altim);
                 entity["awx_taf"] = RawTaf;
-                entity["awx_elevation_m"] = Utils.MetersToFeet(Elev);
+                entity["awx_elevation"] = Utils.MetersToFeet(Elev);
                 entity["awx_weatherstring"] = WxString;
                 // TODO: Refactor clouds to be viable for filtering
                 if (Clouds != null && Clouds.Count > 0)
@@ -165,6 +165,24 @@ namespace AviationWeatherDataProvider.Models
                 }
 
                 return entity;
+            }
+
+            decimal? ConvertVisibility(string visib)
+            {
+                if (string.IsNullOrEmpty(visib))
+                {
+                    return null;
+                }
+                if (visib == "10+")
+                {
+                    visib = "10";
+                }
+                var parsed = decimal.TryParse(visib, out decimal result);
+                if (!parsed)
+                {
+                    throw new InvalidCastException($"Visibility ({visib}) is not a valid integer.");
+                }
+                return result;
             }
         }
 
